@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:jwt_decoder/jwt_decoder.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:plaid_flutter/plaid_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +43,6 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
   final String baseUrl = dotenv.env['BASE_URL'] ?? 'http://localhost:5000/api';
   String? token;
   String? userId;
-  String? linkToken;
   String output = 'Output will be shown here';
 
   final TextEditingController emailController = TextEditingController();
@@ -62,6 +61,7 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
     super.dispose();
   }
 
+  // Load the stored token from SharedPreferences
   Future<void> _loadStoredToken() async {
     final prefs = await SharedPreferences.getInstance();
     final storedToken = prefs.getString('token');
@@ -76,11 +76,13 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
     }
   }
 
+  // Store the token in SharedPreferences
   Future<void> _storeToken(String newToken) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', newToken);
   }
 
+  // Login the user by sending credentials to the backend
   Future<void> loginUser(String email, String password) async {
     if (email.isEmpty || password.isEmpty) {
       setState(() {
@@ -100,6 +102,8 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
         body: jsonEncode({'email': email, 'password': password}),
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         token = data['token'];
@@ -116,12 +120,14 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         output = 'Error: $e';
       });
     }
   }
 
+  // Create a Plaid link token by communicating with the backend
   Future<void> createLinkToken() async {
     if (token == null || userId == null) {
       setState(() => output = 'Please login first');
@@ -142,27 +148,109 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
         body: jsonEncode({'userId': userId}),
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        linkToken = data['linkToken'];
+        final linkToken = data['linkToken'];
 
         setState(() {
-          output = 'Link Token generated. Redirecting to Plaid Link...';
+          output = 'Link Token generated. Opening Plaid Link...';
         });
 
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PlaidWebView(initialUrl: linkToken!),
-          ),
-        );
+        await openPlaidLink(linkToken);
       } else {
-        setState(
-            () => output = 'Failed to generate Link Token: ${response.body}');
+        setState(() => output = 'Failed to generate Link Token: ${response.body}');
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => output = 'Error: $e');
+    }
+  }
+
+  // Exchange the public token received from Plaid for an access token
+  Future<void> exchangePublicToken(String publicToken) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/plaid/exchange_public_token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'publicToken': publicToken}),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          output = 'Public token exchanged successfully';
+        });
+        debugPrint('Exchange successful: $data');
+      } else {
+        setState(() {
+          output = 'Failed to exchange public token: ${response.body}';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        output = 'Error exchanging public token: $e';
+      });
+    }
+  }
+
+  // Open the Plaid Link using the provided link token
+  Future<void> openPlaidLink(String linkToken) async {
+    try {
+      // Create configuration with only the required token parameter
+      final configuration = LinkTokenConfiguration(
+        token: linkToken,
+      );
+
+      // Initialize Plaid Link
+      await PlaidLink.create(configuration: configuration);
+
+      // Open Plaid Link without assigning the result since it returns void
+      await PlaidLink.open();
+
+      // Set up event listeners
+      PlaidLink.onSuccess.listen((LinkSuccess success) async {
+        debugPrint('Link Success - Public Token: ${success.publicToken}');
+        await exchangePublicToken(success.publicToken);
+      });
+
+      PlaidLink.onExit.listen((LinkExit exit) {
+        if (exit.error != null) {
+          debugPrint('Link Error: ${exit.error?.displayMessage}');
+          setState(() {
+            output = 'Link Error: ${exit.error?.displayMessage}';
+          });
+        } else {
+          debugPrint('Link Exit - User closed Plaid Link');
+          setState(() {
+            output = 'Link closed by user';
+          });
+        }
+      });
+
+      PlaidLink.onEvent.listen((LinkEvent event) {
+        debugPrint('Link Event: ${event.name}');
+        // Optionally, you can handle different events here
+        // For example, show a toast or update the UI based on event.name
+      });
+
+      // Update the UI to indicate that Plaid Link has been opened
+      setState(() {
+        output = 'Plaid Link opened successfully';
+      });
+    } catch (e) {
+      debugPrint('Error creating/opening Plaid Link: $e');
+      if (!mounted) return;
+      setState(() {
+        output = 'Error: $e';
+      });
     }
   }
 
@@ -174,29 +262,38 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // Email Input Field
             TextField(
               controller: emailController,
               decoration: const InputDecoration(labelText: 'Email'),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 16),
+
+            // Password Input Field
             TextField(
               controller: passwordController,
               decoration: const InputDecoration(labelText: 'Password'),
               obscureText: true,
             ),
             const SizedBox(height: 24),
+
+            // Login Button
             ElevatedButton(
               onPressed: () =>
                   loginUser(emailController.text, passwordController.text),
               child: const Text('Login User'),
             ),
             const SizedBox(height: 16),
+
+            // Generate Link Token Button
             ElevatedButton(
               onPressed: createLinkToken,
               child: const Text('Generate Link Token'),
             ),
             const SizedBox(height: 20),
+
+            // Output Display Container
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -207,68 +304,6 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class PlaidWebView extends StatefulWidget {
-  final String initialUrl;
-
-  const PlaidWebView({super.key, required this.initialUrl});
-
-  @override
-  State<PlaidWebView> createState() => _PlaidWebViewState();
-}
-
-class _PlaidWebViewState extends State<PlaidWebView> {
-  late final WebViewController controller;
-  bool isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (String url) {
-            setState(() {
-              isLoading = false;
-            });
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            if (request.url.startsWith('plaidlink://')) {
-              Navigator.of(context).pop();
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(
-          'https://cdn.plaid.com/link/v2/stable/link.html?isWebview=true&token=${widget.initialUrl}'));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Connect Your Bank'),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: controller),
-          if (isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
-        ],
       ),
     );
   }

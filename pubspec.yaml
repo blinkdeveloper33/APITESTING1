@@ -18,7 +18,6 @@ dependencies:
   http: ^1.2.2
   plaid_flutter: ^4.1.1
   jwt_decoder: ^2.0.1
-  webview_flutter: ^4.10.0
   shared_preferences: ^2.3.3
 
 
