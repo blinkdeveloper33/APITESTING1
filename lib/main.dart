@@ -168,38 +168,42 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
     }
   }
 
-  // Exchange the public token received from Plaid for an access token
-  Future<void> exchangePublicToken(String publicToken) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/plaid/exchange_public_token'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'publicToken': publicToken}),
-      );
+ Future<void> exchangePublicToken(String publicToken) async {
+  if (userId == null) {
+    setState(() => output = 'User ID is required. Please log in again.');
+    return;
+  }
 
-      if (!mounted) return;
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/plaid/exchange_public_token'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'publicToken': publicToken, 'userId': userId}),
+    );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          output = 'Public token exchanged successfully';
-        });
-        debugPrint('Exchange successful: $data');
-      } else {
-        setState(() {
-          output = 'Failed to exchange public token: ${response.body}';
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
+    if (!mounted) return;
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
       setState(() {
-        output = 'Error exchanging public token: $e';
+        output = 'Public token exchanged successfully';
+      });
+      debugPrint('Exchange successful: $data');
+    } else {
+      setState(() {
+        output = 'Failed to exchange public token: ${response.body}';
       });
     }
+  } catch (e) {
+    if (!mounted) return;
+    setState(() {
+      output = 'Error exchanging public token: $e';
+    });
   }
+}
 
   // Open the Plaid Link using the provided link token
   Future<void> openPlaidLink(String linkToken) async {
