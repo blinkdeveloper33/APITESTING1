@@ -1,8 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Permissions -->
+    <!-- Essential Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Optional: Suppress Bluetooth Warnings -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
@@ -12,15 +11,13 @@
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:enableOnBackInvokedCallback="true"
-        android:hardwareAccelerated="false"
+        android:hardwareAccelerated="true"
         android:largeHeap="true">
 
-        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -36,9 +33,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Plaid Link Activity -->
         <activity
-            android:name="android.app.Activity"
+            android:name="com.plaid.link.LinkActivity"
             android:exported="true">
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -48,7 +44,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Flutter Embedding Metadata -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

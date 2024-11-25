@@ -158,7 +158,8 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
           ),
         );
       } else {
-        setState(() => output = 'Failed to generate Link Token: ${response.body}');
+        setState(
+            () => output = 'Failed to generate Link Token: ${response.body}');
       }
     } catch (e) {
       setState(() => output = 'Error: $e');
@@ -211,19 +212,32 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
   }
 }
 
-class PlaidWebView extends StatelessWidget {
+class PlaidWebView extends StatefulWidget {
   final String initialUrl;
 
   const PlaidWebView({super.key, required this.initialUrl});
 
   @override
-  Widget build(BuildContext context) {
-    final String plaidUrl = 'https://cdn.plaid.com/link/v2/stable/link.html?isWebview=true&token=$initialUrl';
-    
-    final WebViewController controller = WebViewController()
+  State<PlaidWebView> createState() => _PlaidWebViewState();
+}
+
+class _PlaidWebViewState extends State<PlaidWebView> {
+  late final WebViewController controller;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageFinished: (String url) {
+            setState(() {
+              isLoading = false;
+            });
+          },
           onNavigationRequest: (NavigationRequest request) {
             if (request.url.startsWith('plaidlink://')) {
               Navigator.of(context).pop();
@@ -233,8 +247,12 @@ class PlaidWebView extends StatelessWidget {
           },
         ),
       )
-      ..loadRequest(Uri.parse(plaidUrl));
+      ..loadRequest(Uri.parse(
+          'https://cdn.plaid.com/link/v2/stable/link.html?isWebview=true&token=${widget.initialUrl}'));
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Connect Your Bank'),
@@ -243,7 +261,15 @@ class PlaidWebView extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: WebViewWidget(controller: controller),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: controller),
+          if (isLoading)
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+        ],
+      ),
     );
   }
 }
