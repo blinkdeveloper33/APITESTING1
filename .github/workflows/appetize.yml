@@ -1,0 +1,38 @@
+name: Deploy to Appetize
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          flutter clean
+
+      - name: Build APK
+        run: flutter build apk --debug --no-tree-shake-icons
+
+      - name: Upload to Appetize
+        uses: appetizeio/github-action-appetize@v1.0.3
+        with:
+          apiToken: tok_bggbccv5rmcljnaxkcrekgy7m4
+          appFile: build/app/outputs/apk/debug/app-debug.apk
+          platform: 'android'
